@@ -5,7 +5,6 @@ const socketio = require("socket.io");
 const formatMessage = require("./utils/messages");
 const { createAdapter } = require("@socket.io/redis-adapter");
 const redis = require("redis");
-require("dotenv").config();
 const { createClient } = redis;
 const {
   userJoin,
@@ -17,6 +16,8 @@ const {
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
+const REDIS_URL = "redis://red-cujdedl2ng1s73b540mg:6379";  // Your Redis URL from Render
+
 
 // Set static folder
 app.use(express.static(path.join(__dirname, "public")));
@@ -27,7 +28,7 @@ let pubClient, subClient;
 
 (async () => {
   try {
-    pubClient = createClient({ url: process.env.REDIS_URL });
+    pubClient = createClient({ REDIS_URL });
     pubClient.on("error", (err) => console.error("Redis PubClient Error:", err));
 
     await pubClient.connect();
