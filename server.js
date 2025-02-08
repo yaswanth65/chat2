@@ -21,37 +21,44 @@ const io = socketio(server);
 // Set static folder
 app.use(express.static(path.join(__dirname, "public")));
 
-const botName = "chat app";
+const botName = "Chat App";
 
 let pubClient, subClient;
 
 (async () => {
-  pubClient = createClient({ url: "redis://127.0.0.1:6379" });
-  await pubClient.connect();
-  subClient = pubClient.duplicate();
-  await subClient.connect();
-  io.adapter(createAdapter(pubClient, subClient));
+  try {
+    pubClient = createClient({ url: process.env.REDIS_URL });
+    pubClient.on("error", (err) => console.error("Redis PubClient Error:", err));
+
+    await pubClient.connect();
+
+    subClient = pubClient.duplicate();
+    subClient.on("error", (err) => console.error("Redis SubClient Error:", err));
+
+    await subClient.connect();
+
+    io.adapter(createAdapter(pubClient, subClient));
+    console.log("Redis adapter connected");
+  } catch (error) {
+    console.error("Redis connection failed:", error);
+  }
 })();
 
 // Run when client connects
 io.on("connection", (socket) => {
-  console.log(io.of("/").adapter);
+  console.log(`New connection: ${socket.id}`);
 
   socket.on("joinRoom", ({ username, room }) => {
     const user = userJoin(socket.id, username, room);
-
     socket.join(user.room);
 
     // Welcome current user
-    socket.emit("message", formatMessage(botName, "Welcome to ChatCord!"));
+    socket.emit("message", formatMessage(botName, "Welcome to Chat App!"));
 
     // Broadcast when a user connects
     socket.broadcast
       .to(user.room)
-      .emit(
-        "message",
-        formatMessage(botName, `${user.username} has joined the chat`)
-      );
+      .emit("message", formatMessage(botName, `${user.username} has joined the chat`));
 
     // Send users and room info
     io.to(user.room).emit("roomUsers", {
@@ -63,19 +70,16 @@ io.on("connection", (socket) => {
   // Listen for chatMessage
   socket.on("chatMessage", (msg) => {
     const user = getCurrentUser(socket.id);
-
-    io.to(user.room).emit("message", formatMessage(user.username, msg));
+    if (user) {
+      io.to(user.room).emit("message", formatMessage(user.username, msg));
+    }
   });
 
   // Runs when client disconnects
   socket.on("disconnect", () => {
     const user = userLeave(socket.id);
-
     if (user) {
-      io.to(user.room).emit(
-        "message",
-        formatMessage(botName, `${user.username} has left the chat`)
-      );
+      io.to(user.room).emit("message", formatMessage(botName, `${user.username} has left the chat`));
 
       // Send users and room info
       io.to(user.room).emit("roomUsers", {
@@ -86,6 +90,5 @@ io.on("connection", (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000;
-
+const PORT = process.env.PORT || 10000;
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
