@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css"
+        crossorigin="anonymous"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+    <title>ChitChat App</title>
+</head>
+<body>
+    <div class="join-container">
+        <header class="join-header">
+            <h1>ChitChat App</h1>
+        </header>
+        <main class="join-main">
+            <div class="room-list-container">
+                <h2>Available Rooms</h2>
+                <ul id="room-list-display"></ul>
+                <div class="form-control">
+                    <input
+                        type="text"
+                        id="new-room"
+                        placeholder="Create new room..."
+                        maxlength="30"
+                        pattern="[a-zA-Z0-9_-]+"
+                    />
+                    <button onclick="createRoom()" class="btn">Create Room</button>
+                </div>
+            </div>
+            <form id="join-form">
+                <div class="form-control">
+                    <label for="username">Username</label>
+                    <input
+                        type="text"
+                        name="username"
+                        id="username"
+                        placeholder="Enter username..."
+                        required
+                        maxlength="20"
+                        pattern="[a-zA-Z0-9_-]+"
+                    />
+                </div>
+                <div class="form-control">
+                    <label for="room">Room</label>
+                    <input
+                        type="text"
+                        name="room"
+                        id="room"
+                        placeholder="Enter room name or select below..."
+                        list="room-list"
+                        required
+                        maxlength="30"
+                        pattern="[a-zA-Z0-9_-]+"
+                    />
+                    <datalist id="room-list">
+                    </datalist>
+                </div>
+                <button type="submit" class="btn">Join Chat</button>
+            </form>
+        </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        
+        // Initialize rooms from localStorage or use default rooms
+        const defaultRooms = ['General', 'Tech', 'Random', 'Social'];
+        let rooms = JSON.parse(localStorage.getItem('chatRooms')) || defaultRooms;
+        
+        // Save rooms to localStorage
+        function saveRooms() {
+            localStorage.setItem('chatRooms', JSON.stringify(rooms));
+        }
+
+        // DOM elements
+        const roomListDisplay = document.getElementById('room-list-display');
+        const roomListInput = document.getElementById('room-list');
+        const newRoomInput = document.getElementById('new-room');
+
+        // Function to update room lists
+        function updateRoomLists() {
+            roomListDisplay.innerHTML = '';
+            roomListInput.innerHTML = '';
+
+            rooms.forEach((room) => {
+                // Add to displayed list
+                const listItem = document.createElement('li');
+                listItem.textContent = room;
+                
+                // Add delete button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.className = 'delete-btn';
+                deleteBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Delete room "${room}"?`)) {
+                        rooms = rooms.filter(r => r !== room);
+                        saveRooms();
+                        updateRoomLists();
+                        socket.emit('roomsUpdated', rooms);
+                    }
+                };
+                
+                // Don't allow deletion of default rooms
+                if (!defaultRooms.includes(room)) {
+                    listItem.appendChild(deleteBtn);
+                }
+
+                listItem.onclick = () => {
+                    document.getElementById('room').value = room;
+                };
+                roomListDisplay.appendChild(listItem);
+
+                // Add to datalist for input
+                const option = document.createElement('option');
+                option.value = room;
+                roomListInput.appendChild(option);
+            });
+
+            // Save to localStorage
+            saveRooms();
+            
+            // Emit updated rooms to other users
+            socket.emit('roomsUpdated', rooms);
+        }
+
+        // Function to create a new room
+        function createRoom() {
+            const newRoom = newRoomInput.value.trim();
+            if (newRoom && !rooms.includes(newRoom)) {
+                rooms.push(newRoom);
+                updateRoomLists();
+                newRoomInput.value = '';
+                document.getElementById('room').value = newRoom;
+            }
+        }
+
+        // Allow creating room with Enter key
+        newRoomInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                createRoom();
+            }
+        });
+
+        // Initial room list display
+        updateRoomLists();
+
+        // Handle form submission
+        const joinForm = document.getElementById('join-form');
+        joinForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const username = document.getElementById('username').value.trim();
+            const room = document.getElementById('room').value.trim();
+
+            if (username && room) {
+                // Add room to list if it's new
+                if (!rooms.includes(room)) {
+                    rooms.push(room);
+                    updateRoomLists();
+                }
+
+                const params = new URLSearchParams({
+                    username: username,
+                    room: room
+                });
+                window.location.href = `/chat.html?${params.toString()}`;
+            }
+        });
+
+        // Socket event to sync rooms across clients
+        socket.on('roomsUpdated', (updatedRooms) => {
+            rooms = updatedRooms;
+            updateRoomLists();
+        });
+
+        // Add styles
+        const style = document.createElement('style');
+        style.textContent = `
+            #room-list-display li {
+                cursor: pointer;
+                padding: 5px 10px;
+                margin: 2px 0;
+                border-radius: 4px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            #room-list-display li:hover {
+                background-color: #e9ecef;
+            }
+            .delete-btn {
+                background: none;
+                border: none;
+                color: #dc3545;
+                cursor: pointer;
+                padding: 0 5px;
+                font-size: 1.2em;
+                opacity: 0.7;
+            }
+            .delete-btn:hover {
+                opacity: 1;
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
